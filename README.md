@@ -1,4 +1,9 @@
-psi-feature-burnup-exclude-stories
-==================================
+psifeatureburnupexcludestories
+=========================
 
-A version of the PSI Burnup that excludes certain classes of stories.
+## Overview
+
+
+## License
+
+AppTemplate is released under the MIT license.  See the file [LICENSE](https://raw.github.com/RallyApps/AppTemplate/master/LICENSE) for the full text.
