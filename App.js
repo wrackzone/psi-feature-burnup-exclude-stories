@@ -91,11 +91,8 @@ Ext.define('CustomApp', {
             listeners:{
             	scope: this,
             	change: function(field,eOpts){
-            		console.log('field ',field);
-            		console.log('eOpts ',eOpts);
             		if(value!="" && value!=null)
             		{
-            			console.log('this here');
             			this.afterCollapse(fieldValue,value);
             		}
             	}
