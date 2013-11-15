@@ -2,7 +2,9 @@ var acceptedPointsData = [];
 var acceptedCountData = [];
 var myMask = null;
 var app = null;
-var showAssignedProgram = false;
+var showAssignedProgram = true;
+var lumenize = window.parent.Rally.data.lookback.Lumenize;
+var isoStart = null;
 
 // demonstrate github.com
 
@@ -12,7 +14,6 @@ Ext.define('CustomApp', {
     componentCls: 'app',
     
     layout : 'column',
-    // defaultMargins : { top: 10, right: 20, bottom: 10, left: 10 },
 
     launch: function() {
         Ext.state.Manager.setProvider(
@@ -33,10 +34,6 @@ Ext.define('CustomApp', {
                        fetch : ['Name','ObjectID','Value'], 
                        filters : [] 
         });
-        // configs.push({ model : "Project",             
-        //               fetch : ['Name','ObjectID'], 
-        //               filters : [] 
-        // });
         configs.push({ model : "Release",             
                        fetch : ['Name', 'ObjectID', 'Project', 'ReleaseStartDate', 'ReleaseDate' ], 
                        filters:[] 
@@ -45,12 +42,18 @@ Ext.define('CustomApp', {
                        fetch : ['Name', 'ObjectID', 'Project', 'StartDate', 'EndDate' ], 
                        filters:[] 
         });
-        
+        configs.push({ model : "Tag",             
+                       fetch : ['Name', 'ObjectID'], 
+                       filters:[ { property : "Name", operator : "Contains" , value : "UPLC" } ] 
+        });
+
         async.map( configs, this.wsapiQuery, function(err,results) {
             that.peRecords = results[0];
             // that.projects  = results[1];
             that.releases  = results[1];
             that.iterations = results[2];
+            that.estimationTags = _.pluck( results[3], function(t) { return t.get("ObjectID");} );
+            console.log("estimation tags",that.estimationTags);
             if (showAssignedProgram)
                 that.createAssignedProgramCombo();
             that.createReleaseCombo(that.releases);
@@ -193,12 +196,18 @@ Ext.define('CustomApp', {
             autoLoad: true,
             model: 'PortfolioItem/Feature',
             limit : 'Infinity',
-            fetch: ['ObjectID','FormattedID' ],
+            fetch: ['ObjectID','FormattedID','UserStories' ],
             filters: [filter],
             listeners: {
                 load: function(store, features) {
-                    console.log("features",features.length,features);
-                    that.createChart(features,releases);
+                    console.log("# features",features.length,features);
+                    that.isoReleaseStart = that.isoReleaseStartDate(releases);
+                    that.start = _.min(_.pluck(releases,function(r) { return r.get("ReleaseStartDate");}));
+                    isoStart = new lumenize.Time(that.start).getISOStringInTZ("America/Chicago");
+                    console.log("isoStart1",isoStart);
+                    that.end   = _.max(_.pluck(releases,function(r) { return r.get("ReleaseDate");}));
+                    that.releases = releases;
+                    that.getStorySnapshotsForFeatures( features, releases );
                 }
             }
         });        
@@ -210,49 +219,6 @@ Ext.define('CustomApp', {
 
     },
 
-    createChart1 : function ( features, releases,start,end) {
-        
-        var that = this;
-        var lumenize = window.parent.Rally.data.lookback.Lumenize;
-        var snapShotData = _.map(features,function(d){return d.data;});
-        var snaps = _.sortBy(snapShotData,"_UnformattedID");
-        // can be used to 'knockout' holidays
-        var holidays = [
-            {year: 2014, month: 1, day: 1}  // Made up holiday to test knockout
-        ];
-        var myCalc = Ext.create("MyBurnCalculator");
-
-        // calculator config
-        var config = {
-            deriveFieldsOnInput: myCalc.getDerivedFieldsOnInput(),
-            metrics: myCalc.getMetrics(),
-            summaryMetricsConfig: [],
-            deriveFieldsAfterSummary: myCalc.getDerivedFieldsAfterSummary(),
-            granularity: lumenize.Time.DAY,
-            tz: 'America/Chicago',
-            holidays: holidays,
-            workDays: 'Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday'
-        };
-        // release start and end dates
-        var startOnISOString = new lumenize.Time(start).getISOStringInTZ(config.tz);
-        var upToDateISOString = new lumenize.Time(end).getISOStringInTZ(config.tz);
-        // create the calculator and add snapshots to it.
-        calculator = new lumenize.TimeSeriesCalculator(config);
-        calculator.addSnapshots(snapShotData, startOnISOString, upToDateISOString);
-        
-        // create a high charts series config object, used to get the hc series data
-        var hcConfig = [{ name : "label" }, 
-                        this.pointsUnitType() ? { name : "Planned Points" } : { name : "Planned Count" }, 
-                        { name : "PreliminaryEstimate"},
-                        this.pointsUnitType() ? { name : "Accepted Points"} : { name : "Accepted Count"},
-                        this.pointsUnitType() ? { name : "ProjectionPoints"}: { name : "ProjectionCount"},
-                        { name : "Count", type:'column'},
-                        { name : "Completed",type:'column'} ];
-        var hc = lumenize.arrayOfMaps_To_HighChartsSeries(calculator.getResults().seriesData, hcConfig);
-        
-        this._showChart(hc);
-    },
-    
     createPlotLines : function(seriesData) { 
         // filter the iterations
         var start = new Date( Date.parse(seriesData[0]));
@@ -282,38 +248,171 @@ Ext.define('CustomApp', {
         });
         return itPlotLines.concat(rePlotLines);
     },
-
-    createChart : function (features,releases) {
-
-        var ids = _.pluck(features, function(feature) { return feature.get("ObjectID");} );
-        var start = _.min(_.pluck(releases,function(r) { return r.get("ReleaseStartDate");}));
-        var end   = _.max(_.pluck(releases,function(r) { return r.get("ReleaseDate");}));
-        var isoStart  = Rally.util.DateTime.toIsoString(start, false);
+    
+    getStorySnapshotsForFeatures : function(features) {
         
-        var storeConfig = {
-            find : {
-                '_TypeHierarchy' : { "$in" : ["PortfolioItem/Feature"] }
-            },
-            autoLoad : true,
-            pageSize:1000,
-            limit: 'Infinity',
-            fetch: ['_UnformattedID','ObjectID','_TypeHierarchy','PreliminaryEstimate', 'LeafStoryCount','LeafStoryPlanEstimateTotal','AcceptedLeafStoryPlanEstimateTotal','AcceptedLeafStoryCount','PercentDoneByStoryCount'],
-            hydrate: ['_TypeHierarchy']
-		};
-
-        storeConfig.find['ObjectID'] = { "$in": ids };
-        storeConfig.find['_ProjectHierarchy'] = { "$in": this.project };
-        storeConfig.find['_ValidTo'] = { "$gte" : isoStart  };
-        storeConfig.listeners = {
-                scope : this,
-                load: function(store, features, success) {
-                    this.createChart1(features,releases,start,end);
-                }
-        };
+        var snapshots = [];
+        var that = this;
         
-        var snapshotStore = Ext.create('Rally.data.lookback.SnapshotStore', storeConfig);
+        async.map( features, this.readFeatureSnapshots, function(err,results) {
+            console.log("results",results);
+            _.each(results,function(result) {
+               snapshots = snapshots.concat(result);
+            });
+            console.log("total snapshots before",snapshots.length);
+            // filter out stories that have an estimation tag        
+            snapshots = _.filter(snapshots,function(snapshot) {
+                return _.intersection(snapshot.get("Tags"), that.estimationTags ).length === 0;
+            });
+            console.log("total snapshots after",snapshots.length);
+            that.createChart2(snapshots,that.releases,that.start,that.end);
+        });
     },
     
+    readParentStorySnapshots : function(parent,callback) {
+        
+        Ext.create('Rally.data.lookback.SnapshotStore', {
+            limit : "Infinity",
+            autoLoad : true,
+            listeners: {
+                scope : this,
+                load: function(store, data, success) {
+                    callback(null,data);
+                }
+            },
+            fetch : ['Project', 'ScheduleState', 'PlanEstimate','Children','_ItemHierarchy','Tags'],
+            hydrate : ['ScheduleState'],
+            filters: [
+                {
+                    property: '_TypeHierarchy',
+                    operator: 'in',
+                    value: ['HierarchicalRequirement']
+                },
+                {
+                    property: '_ItemHierarchy',
+                    operator: 'in',
+                    value: [parent.get("ObjectID")]
+                },
+                // {
+                //     property: '_ValidTo',
+                //     operator: '>',
+                //     value: isoStart
+                // },
+                {
+                    property: 'Children',
+                    operator: '=',
+                    value: null
+                },
+                {
+                    property: '__At',
+                    operator: '=',
+                    value: 'current'
+                }
+
+            ]
+        });
+
+    },
+    
+    readFeatureSnapshots : function(feature,callback) {
+        var that = this;
+        
+        feature.getCollection("UserStories").load({
+            fetch : ["ObjectID"],
+            callback : function(records,operation,success) {
+                console.log("Feature:"+feature.get("FormattedID"),records.length,records);
+                async.map(records,app.readParentStorySnapshots,function(err,results) {
+                    var snapshots = [];
+                    _.each(results,function(r) {
+                        snapshots = snapshots.concat(r);
+                    })
+                    callback(null,snapshots);    
+                });
+                
+            }
+        });
+        
+        // console.log("isoStart",isoStart);
+        // Ext.create('Rally.data.lookback.SnapshotStore', {
+        //     limit : "Infinity",
+        //     autoLoad : true,
+        //     listeners: {
+        //         scope : this,
+        //         load: function(store, data, success) {
+        //             callback(null,data);
+        //         }
+        //     },
+        //     fetch : ['Project', 'ScheduleState', 'PlanEstimate','Children','_ItemHierarchy','Tags'],
+        //     hydrate : ['ScheduleState'],
+        //     filters: [
+        //         {
+        //             property: '_TypeHierarchy',
+        //             operator: 'in',
+        //             value: ['HierarchicalRequirement']
+        //         },
+        //         {
+        //             property: '_ItemHierarchy',
+        //             operator: 'in',
+        //             value: [feature.get("ObjectID")]
+        //         },
+        //         {
+        //             property: '_ValidTo',
+        //             operator: '>',
+        //             value: isoStart
+        //         }
+        //     ]
+        // });
+    },
+    
+    createChart2 : function ( snapshots, releases,start,end) {
+            
+        var that = this;
+        // var lumenize = window.parent.Rally.data.lookback.Lumenize;
+        var snapShotData = _.map(snapshots,function(d){return d.data;});
+        console.log("snapshots",snapShotData);
+        // can be used to 'knockout' holidays
+        var holidays = [
+        ];
+        var myCalc = Ext.create("MyStoryCalculator");
+
+        // calculator config
+        var config = {
+            deriveFieldsOnInput: myCalc.getDerivedFieldsOnInput(),
+            metrics: myCalc.getMetrics(),
+            summaryMetricsConfig: [],
+            deriveFieldsAfterSummary: myCalc.getDerivedFieldsAfterSummary(),
+            granularity: lumenize.Time.DAY,
+            tz: 'America/Chicago',
+            holidays: holidays,
+            workDays: 'Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday'
+        };
+        // release start and end dates
+        var startOnISOString = new lumenize.Time(start).getISOStringInTZ(config.tz);
+        console.log("isoStart",startOnISOString);
+        var upToDateISOString = new lumenize.Time(end).getISOStringInTZ(config.tz);
+        // create the calculator and add snapshots to it.
+        calculator = new lumenize.TimeSeriesCalculator(config);
+        calculator.addSnapshots(snapShotData, startOnISOString, upToDateISOString);
+        
+        // create a high charts series config object, used to get the hc series data
+        var hcConfig = [{ name : "label" }, 
+                        this.pointsUnitType() ? { name : "Planned Points" } : { name : "Planned Count" }, 
+                        { name : "PreliminaryEstimate"},
+                        this.pointsUnitType() ? { name : "Accepted Points"} : { name : "Accepted Count"},
+                        this.pointsUnitType() ? { name : "ProjectionPoints"}: { name : "ProjectionCount"},
+                        // { name : "Count", type:'column'},
+                        // { name : "Completed",type:'column'} 
+                        ];
+        var hc = lumenize.arrayOfMaps_To_HighChartsSeries(calculator.getResults().seriesData, hcConfig);
+        
+        this._showChart(hc);
+    },
+    
+    isoReleaseStartDate : function(releases) {
+        var start = _.min(_.pluck(releases,function(r) { return r.get("ReleaseStartDate");}));
+        return Rally.util.DateTime.toIsoString(start, false);
+    },
+
     _showChart : function(series) {
         var that = this;
         var chart = this.down("#chart1");
@@ -388,3 +487,4 @@ Ext.define('CustomApp', {
     }
 
 });
+
