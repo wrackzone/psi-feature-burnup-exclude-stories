@@ -5,6 +5,10 @@ var app = null;
 var showAssignedProgram = true;
 var lumenize = window.parent.Rally.data.lookback.Lumenize;
 var isoStart = null;
+var cb = null;
+var releases = releaserecord = null;
+var fieldvalue = null;
+var value = null;
 
 // demonstrate github.com
 
@@ -83,7 +87,19 @@ Ext.define('CustomApp', {
             model : "PortfolioItem/Feature",
             field : "AssignedProgram",
             stateful : true,
-            stateId : "assignedProgramCombo"
+            stateId : "assignedProgramCombo",
+            listeners:{
+            	scope: this,
+            	change: function(field,eOpts){
+            		console.log('field ',field);
+            		console.log('eOpts ',eOpts);
+            		if(value!="" && value!=null)
+            		{
+            			console.log('this here');
+            			this.afterCollapse(fieldValue,value);
+            		}
+            	}
+            }
         });
         this.add(this.assignedProgramCombo);
     },
@@ -122,7 +138,7 @@ Ext.define('CustomApp', {
 
     // creates a release drop down combo box with the uniq set of release names
     createReleaseCombo : function(releaseRecords) {
-        
+         releaserecord = releaseRecords;
         // given a list of all releases (accross sub projects)
         var releases = _.map( releaseRecords, function(rec) { return { name : rec.get("Name"), objectid : rec.get("ObjectID"), releaseDate : new Date(Date.parse(rec.get("ReleaseDate")))};});
         // get a unique list by name to display in combobox        
@@ -145,13 +161,26 @@ Ext.define('CustomApp', {
                 
             listeners : {
                 scope : this,
+                change: function(field,eOpts){
+                	console.log('Checked and field ',field);
+                	fieldValue = field;
+                	value = eOpts;
+                },
                 // after collapsing the list
                 collapse : function ( field, eOpts ) {
-                    var r = [];
+                    this.afterCollapse(field,eOpts);
+                }
+            }
+        });
+        this.add(cb);
+    },
+    
+    afterCollapse: function(field, eOpts){
+    				var r = [];
                     // // for each selected release name, select all releases with that name and grab the object id and push it into an 
                     // // array. The result will be an array of all matching release that we will use to query for snapshots.
                     _.each( field.getValue().split(","), function (rn) {
-                        var matching_releases = _.filter( releaseRecords, function(r) { return rn == r.get("Name");});
+                        var matching_releases = _.filter( releaserecord, function(r) { return rn == r.get("Name");});
                         var uniq_releases = _.uniq(matching_releases, function(r) { return r.get("Name"); });
                         _.each(uniq_releases,function(release) { r.push(release); });
                     });
@@ -161,10 +190,6 @@ Ext.define('CustomApp', {
                         this.selectedReleases = r;
                         this.queryFeatures(r);
                     }
-                }
-            }
-        });
-        this.add(cb);
     },
     
     queryFeatures : function(releases) {
@@ -325,7 +350,7 @@ Ext.define('CustomApp', {
                     var snapshots = [];
                     _.each(results,function(r) {
                         snapshots = snapshots.concat(r);
-                    })
+                    });
                     callback(null,snapshots);    
                 });
                 
