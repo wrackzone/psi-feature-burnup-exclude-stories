@@ -222,18 +222,19 @@ Ext.define('CustomApp', {
         }
         
         console.log("filter",filter.toString());
-       var fi = Ext.create('Rally.data.QueryFilter',{
-        	property: 'Project.Name',
-        	operator: '=',
-        	value: 'Unity Product Family Requirements'
-        });
+        
+       
         
         return Ext.create('Rally.data.WsapiDataStore', {
             autoLoad: true,
             model: 'PortfolioItem/Feature',
             limit : 'Infinity',
-            fetch: ['ObjectID','FormattedID','UserStories' ],
-            filters: [filter,fi],
+            fetch: ['ObjectID','FormattedID','UserStories','Project' ],
+            config:{
+            	workspace: '/workspace/3181574357',
+            	project: '/project/6020936452'
+            },
+            filters: [filter],
             listeners: {
                 load: function(store, features) {
                 	console.log('fi is ',fi);
