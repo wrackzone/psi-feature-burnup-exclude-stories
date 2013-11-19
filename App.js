@@ -23,12 +23,20 @@ Ext.define('CustomApp', {
         Ext.state.Manager.setProvider(
             new Ext.state.CookieProvider({ expires: new Date(new Date().getTime()+(10006060247)) })
         );
+        
         app = this;
         var that = this;
+        
+        fi = Ext.create('Rally.data.QueryFilter',{
+        	property: 'Project',
+        	operator: '=',
+        	value: 'Unity Product Family Requirements'
+        });
         console.log("launch");
         // get the project id.
-        this.project = this.getContext().getProject().ObjectID;
-
+       this.project = this.getContext().getProject().ObjectID;
+       console.log('context ',this.getContext());
+       console.log('project is ',this.project);
         // get the release (if on a page scoped to the release)
         var tbName = getReleaseTimeBox(this);
 
@@ -185,7 +193,8 @@ Ext.define('CustomApp', {
                         myMask = new Ext.LoadMask(Ext.getBody(), {msg:"Please wait..."});
                         myMask.show();
                         this.selectedReleases = r;
-                        this.queryFeatures(r);
+                       var answer =  this.queryFeatures(r);
+                       console.log("answer is ",answer);
                     }
     },
     
@@ -211,17 +220,23 @@ Ext.define('CustomApp', {
                 filter = i === 0 ? f : filter.or(f);
             });
         }
-        console.log("filter",filter.toString());
         
+        console.log("filter",filter.toString());
+       var fi = Ext.create('Rally.data.QueryFilter',{
+        	property: 'Project.Name',
+        	operator: '=',
+        	value: 'Unity Product Family Requirements'
+        });
         
         return Ext.create('Rally.data.WsapiDataStore', {
             autoLoad: true,
             model: 'PortfolioItem/Feature',
             limit : 'Infinity',
             fetch: ['ObjectID','FormattedID','UserStories' ],
-            filters: [filter],
+            filters: [filter,fi],
             listeners: {
                 load: function(store, features) {
+                	console.log('fi is ',fi);
                     console.log("# features",features.length,features);
                     that.isoReleaseStart = that.isoReleaseStartDate(releases);
                     that.start = _.min(_.pluck(releases,function(r) { return r.get("ReleaseStartDate");}));
