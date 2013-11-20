@@ -44,18 +44,34 @@ Ext.define('CustomApp', {
         
         configs.push({ model : "PreliminaryEstimate", 
                        fetch : ['Name','ObjectID','Value'], 
+                       context:{
+			            	workspace: '/workspace/3181574357',
+			            	project: '/project/7306522812' // USD Portfolio: 6020936452, UPFR: 7306522812
+			            },
                        filters : [] 
         });
         configs.push({ model : "Release",             
                        fetch : ['Name', 'ObjectID', 'Project', 'ReleaseStartDate', 'ReleaseDate' ], 
+                       context:{
+			            	workspace: '/workspace/3181574357',
+			            	project: '/project/7306522812' // USD Portfolio: 6020936452, UPFR: 7306522812
+			            },
                        filters:[] 
         });
         configs.push({ model : "Iteration",             
                        fetch : ['Name', 'ObjectID', 'Project', 'StartDate', 'EndDate' ], 
+                       context:{
+			            	workspace: '/workspace/3181574357',
+			            	project: '/project/7306522812' // USD Portfolio: 6020936452, UPFR: 7306522812
+			            },
                        filters:[] 
         });
         configs.push({ model : "Tag",             
                        fetch : ['Name', 'ObjectID'], 
+                       context:{
+			            	workspace: '/workspace/3181574357',
+			            	project: '/project/7306522812' // USD Portfolio: 6020936452, UPFR: 7306522812
+			            },
                        filters:[ { property : "Name", operator : "Contains" , value : "UPLC" } ] 
         });
 
@@ -80,6 +96,7 @@ Ext.define('CustomApp', {
             model : config.model,
             fetch : config.fetch,
             filters : config.filters,
+            context: config.context,
             listeners : {
                 scope : this,
                 load : function(store, data) {
@@ -232,7 +249,7 @@ Ext.define('CustomApp', {
             fetch: ['ObjectID','FormattedID','UserStories'],
             context:{
             	workspace: '/workspace/3181574357',
-            	project: '/project/6020936452'
+            	project: '/project/7306522812' // USDP: 6020936452, UPFR: 7306522812
             },
             filters: [filter],
             listeners: {
