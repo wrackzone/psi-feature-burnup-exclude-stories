@@ -229,8 +229,8 @@ Ext.define('CustomApp', {
             autoLoad: true,
             model: 'PortfolioItem/Feature',
             limit : 'Infinity',
-            fetch: ['ObjectID','FormattedID','UserStories','Project' ],
-            config:{
+            fetch: ['ObjectID','FormattedID','UserStories'],
+            context:{
             	workspace: '/workspace/3181574357',
             	project: '/project/6020936452'
             },
@@ -238,7 +238,7 @@ Ext.define('CustomApp', {
             listeners: {
                 load: function(store, features) {
                 	console.log('fi is ',fi);
-                    console.log("# features",features.length,features);
+                    console.log("# features",features.length,features,store);
                     that.isoReleaseStart = that.isoReleaseStartDate(releases);
                     that.start = _.min(_.pluck(releases,function(r) { return r.get("ReleaseStartDate");}));
                     isoStart = new lumenize.Time(that.start).getISOStringInTZ("America/Chicago");
