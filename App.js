@@ -5,6 +5,10 @@ var app = null;
 var showAssignedProgram = true;
 var lumenize = window.parent.Rally.data.lookback.Lumenize;
 var isoStart = null;
+var cb = null;
+var releases = releaserecord = null;
+var fieldvalue = null;
+var value = null;
 
 // demonstrate github.com
 
@@ -19,12 +23,20 @@ Ext.define('CustomApp', {
         Ext.state.Manager.setProvider(
             new Ext.state.CookieProvider({ expires: new Date(new Date().getTime()+(10006060247)) })
         );
+        
         app = this;
         var that = this;
+        
+        fi = Ext.create('Rally.data.QueryFilter',{
+        	property: 'Project',
+        	operator: '=',
+        	value: 'Unity Product Family Requirements'
+        });
         console.log("launch");
         // get the project id.
-        this.project = this.getContext().getProject().ObjectID;
-
+       this.project = this.getContext().getProject().ObjectID;
+       console.log('context ',this.getContext());
+       console.log('project is ',this.project);
         // get the release (if on a page scoped to the release)
         var tbName = getReleaseTimeBox(this);
 
@@ -32,18 +44,34 @@ Ext.define('CustomApp', {
         
         configs.push({ model : "PreliminaryEstimate", 
                        fetch : ['Name','ObjectID','Value'], 
+                       context:{
+			            	workspace: '/workspace/3181574357',
+			            	project: '/project/7306522812' // USD Portfolio: 6020936452, UPFR: 7306522812
+			            },
                        filters : [] 
         });
         configs.push({ model : "Release",             
                        fetch : ['Name', 'ObjectID', 'Project', 'ReleaseStartDate', 'ReleaseDate' ], 
+                       context:{
+			            	workspace: '/workspace/3181574357',
+			            	project: '/project/7306522812' // USD Portfolio: 6020936452, UPFR: 7306522812
+			            },
                        filters:[] 
         });
         configs.push({ model : "Iteration",             
                        fetch : ['Name', 'ObjectID', 'Project', 'StartDate', 'EndDate' ], 
+                       context:{
+			            	workspace: '/workspace/3181574357',
+			            	project: '/project/7306522812' // USD Portfolio: 6020936452, UPFR: 7306522812
+			            },
                        filters:[] 
         });
         configs.push({ model : "Tag",             
                        fetch : ['Name', 'ObjectID'], 
+                       context:{
+			            	workspace: '/workspace/3181574357',
+			            	project: '/project/7306522812' // USD Portfolio: 6020936452, UPFR: 7306522812
+			            },
                        filters:[ { property : "Name", operator : "Contains" , value : "UPLC" } ] 
         });
 
@@ -68,6 +96,7 @@ Ext.define('CustomApp', {
             model : config.model,
             fetch : config.fetch,
             filters : config.filters,
+            context: config.context,
             listeners : {
                 scope : this,
                 load : function(store, data) {
@@ -83,7 +112,16 @@ Ext.define('CustomApp', {
             model : "PortfolioItem/Feature",
             field : "AssignedProgram",
             stateful : true,
-            stateId : "assignedProgramCombo"
+            stateId : "assignedProgramCombo",
+            listeners:{
+            	scope: this,
+            	change: function(field,eOpts){
+            		if(value!="" && value!=null)
+            		{
+            			this.afterCollapse(fieldValue,value);
+            		}
+            	}
+            }
         });
         this.add(this.assignedProgramCombo);
     },
@@ -122,7 +160,7 @@ Ext.define('CustomApp', {
 
     // creates a release drop down combo box with the uniq set of release names
     createReleaseCombo : function(releaseRecords) {
-        
+         releaserecord = releaseRecords;
         // given a list of all releases (accross sub projects)
         var releases = _.map( releaseRecords, function(rec) { return { name : rec.get("Name"), objectid : rec.get("ObjectID"), releaseDate : new Date(Date.parse(rec.get("ReleaseDate")))};});
         // get a unique list by name to display in combobox        
@@ -145,13 +183,26 @@ Ext.define('CustomApp', {
                 
             listeners : {
                 scope : this,
+                change: function(field,eOpts){
+                	console.log('Checked and field ',field);
+                	fieldValue = field;
+                	value = eOpts;
+                },
                 // after collapsing the list
                 collapse : function ( field, eOpts ) {
-                    var r = [];
+                    this.afterCollapse(field,eOpts);
+                }
+            }
+        });
+        this.add(cb);
+    },
+    
+    afterCollapse: function(field, eOpts){
+    				var r = [];
                     // // for each selected release name, select all releases with that name and grab the object id and push it into an 
                     // // array. The result will be an array of all matching release that we will use to query for snapshots.
                     _.each( field.getValue().split(","), function (rn) {
-                        var matching_releases = _.filter( releaseRecords, function(r) { return rn == r.get("Name");});
+                        var matching_releases = _.filter( releaserecord, function(r) { return rn == r.get("Name");});
                         var uniq_releases = _.uniq(matching_releases, function(r) { return r.get("Name"); });
                         _.each(uniq_releases,function(release) { r.push(release); });
                     });
@@ -159,12 +210,9 @@ Ext.define('CustomApp', {
                         myMask = new Ext.LoadMask(Ext.getBody(), {msg:"Please wait..."});
                         myMask.show();
                         this.selectedReleases = r;
-                        this.queryFeatures(r);
+                       var answer =  this.queryFeatures(r);
+                       console.log("answer is ",answer);
                     }
-                }
-            }
-        });
-        this.add(cb);
     },
     
     queryFeatures : function(releases) {
@@ -189,18 +237,25 @@ Ext.define('CustomApp', {
                 filter = i === 0 ? f : filter.or(f);
             });
         }
+        
         console.log("filter",filter.toString());
         
+       
         
         return Ext.create('Rally.data.WsapiDataStore', {
             autoLoad: true,
             model: 'PortfolioItem/Feature',
             limit : 'Infinity',
-            fetch: ['ObjectID','FormattedID','UserStories' ],
+            fetch: ['ObjectID','FormattedID','UserStories'],
+            context:{
+            	workspace: '/workspace/3181574357',
+            	project: '/project/7306522812' // USDP: 6020936452, UPFR: 7306522812
+            },
             filters: [filter],
             listeners: {
                 load: function(store, features) {
-                    console.log("# features",features.length,features);
+                	console.log('fi is ',fi);
+                    console.log("# features",features.length,features,store);
                     that.isoReleaseStart = that.isoReleaseStartDate(releases);
                     that.start = _.min(_.pluck(releases,function(r) { return r.get("ReleaseStartDate");}));
                     isoStart = new lumenize.Time(that.start).getISOStringInTZ("America/Chicago");
@@ -325,7 +380,7 @@ Ext.define('CustomApp', {
                     var snapshots = [];
                     _.each(results,function(r) {
                         snapshots = snapshots.concat(r);
-                    })
+                    });
                     callback(null,snapshots);    
                 });
                 
